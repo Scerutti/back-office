@@ -4,7 +4,7 @@
 // directo y nunca ve tokens (viven en cookies HttpOnly). El refresh lo hace el BFF.
 import { mutate as globalMutate } from 'swr'
 
-export type CoreSession = { name: string; email: string; expiresAt: number; jwksUrl: string }
+export type CoreSession = { userId: string; name: string; email: string; expiresAt: number; jwksUrl: string }
 
 export const SESSION_KEY = 'href-core-session'
 

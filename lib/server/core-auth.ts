@@ -74,6 +74,20 @@ export function endUserIp(request: NextRequest): string | null {
 
 export const newCorrelationId = (): string => randomUUID()
 
+/**
+ * User-Agent del navegador. Core lo guarda en la sesión (familia de refresh tokens): si el BFF no lo
+ * reenvía, todas las sesiones del panel figuran como `node`. Se recorta para no reenviar valores enormes.
+ */
+export function endUserAgent(request: NextRequest): string | null {
+  const value = request.headers.get('user-agent')?.trim()
+  return value ? value.slice(0, 512) : null
+}
+
+/** Contexto de las llamadas M2M a /api/auth/*: IP y User-Agent del navegador, y correlation id. */
+export function authContext(request: NextRequest, correlationId: string): AuthContext {
+  return { ip: endUserIp(request), userAgent: endUserAgent(request), correlationId }
+}
+
 type JwtClaims = { exp?: number; name?: unknown; email?: unknown; sub?: unknown }
 
 /** Solo decodifica el payload para mostrar nombre/email; la autorización la decide la API. */
@@ -94,6 +108,7 @@ const tokenExpiresAt = (token: string) => {
 export function sessionPayload(accessToken: string, config: CoreConfig) {
   const claims = decodeClaims(accessToken) ?? {}
   return {
+    userId: typeof claims.sub === 'string' ? claims.sub : '',
     name: typeof claims.name === 'string' ? claims.name : '',
     email: typeof claims.email === 'string' ? claims.email : '',
     expiresAt: tokenExpiresAt(accessToken),
@@ -141,7 +156,7 @@ export function endSession(problem: Problem) {
 // Llamadas M2M a /api/auth/* (login, refresh, logout) con el cliente tipado del contrato.
 // Siempre con X-App-Key, X-App-Secret y X-End-User-Ip.
 // ---------------------------------------------------------------------------
-type AuthContext = { ip: string | null; correlationId: string }
+export type AuthContext = { ip: string | null; userAgent: string | null; correlationId: string }
 
 function authClient(config: CoreConfig, ctx: AuthContext) {
   const headers: Record<string, string> = {
@@ -150,6 +165,7 @@ function authClient(config: CoreConfig, ctx: AuthContext) {
     'X-Correlation-Id': ctx.correlationId,
   }
   if (ctx.ip) headers['X-End-User-Ip'] = ctx.ip
+  if (ctx.userAgent) headers['User-Agent'] = ctx.userAgent
   return createClient<paths>({ baseUrl: config.baseUrl, headers, cache: 'no-store' })
 }
 

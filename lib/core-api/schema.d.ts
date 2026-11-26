@@ -350,7 +350,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description `Users.EmailTaken`. */
+                /** @description `Users.EmailTaken`, or `Authorization.LastAdmin` when a new email (which clears the verification) would leave Core without an active admin. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -464,7 +464,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description `Users.AlreadyLocked`. */
+                /** @description `Users.AlreadyLocked`, or `Authorization.LastAdmin` when the user is the last active admin of Core. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1658,7 +1658,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description `Authorization.AccessAlreadyGranted` when a concurrent request granted the access first. */
+                /** @description `Authorization.AccessAlreadyGranted` when a concurrent request granted the access first, or `Authorization.LastAdmin` when the new `core` roles would leave Core without an active admin. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1748,6 +1748,15 @@ export interface paths {
                 };
                 /** @description `Applications.NotFound` or `Authorization.AccessNotFound`. */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description `Authorization.LastAdmin` when revoking this `core` access would leave Core without an active admin. */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2643,7 +2652,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description `Authorization.Reserved`: the admin role of the `core` application cannot be deleted. */
+                /** @description `Authorization.Reserved`: the admin role of the `core` application cannot be deleted; `Authorization.LastAdmin` when deleting another `core` role would leave Core without an active admin. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -2755,7 +2764,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description `Authorization.Reserved`: the admin role of the `core` application must keep `core.admin`. */
+                /** @description `Authorization.Reserved`: the admin role of the `core` application must keep `core.admin`; `Authorization.LastAdmin` when removing `core.admin` from another `core` role would leave Core without an active admin. */
                 409: {
                     headers: {
                         [name: string]: unknown;

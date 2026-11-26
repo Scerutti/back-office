@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { endUserIp, newCorrelationId, requireConfig, resolveAccess, sessionPayload, setTokenCookies } from '@/lib/server/core-auth'
+import { authContext, newCorrelationId, requireConfig, resolveAccess, sessionPayload, setTokenCookies } from '@/lib/server/core-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const configured = requireConfig(correlationId)
   if ('response' in configured) return configured.response
 
-  const access = await resolveAccess(request, configured.config, { ip: endUserIp(request), correlationId })
+  const access = await resolveAccess(request, configured.config, authContext(request, correlationId))
   if (!access.ok) return access.response
 
   const response = NextResponse.json({ session: sessionPayload(access.accessToken, configured.config) })

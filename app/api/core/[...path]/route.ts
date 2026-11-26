@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  bffError, coreLogout, endSession, endUserIp, isSameOrigin, newCorrelationId, normalizeProblem,
+  authContext, bffError, coreLogout, endSession, isSameOrigin, newCorrelationId, normalizeProblem,
   refreshEndsSession, refreshTokens, requireConfig, resolveAccess, setTokenCookies, problemResponse,
 } from '@/lib/server/core-auth'
 import type { CoreTokenResponse } from '@/lib/core-api/types'
@@ -59,7 +59,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   if (!rule) return bffError(404, 'Bff.PathNotAllowed', correlationId)
   if (!rule.methods.includes(request.method as Method)) return bffError(405, 'Bff.MethodNotAllowed', correlationId)
 
-  const ctx = { ip: endUserIp(request), correlationId }
+  const ctx = authContext(request, correlationId)
   const access = await resolveAccess(request, config, ctx)
   if (!access.ok) return access.response
   let rotated: CoreTokenResponse | null = access.rotated
@@ -75,6 +75,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const send = (accessToken: string) => {
     const headers = new Headers({ Accept: request.headers.get('accept') ?? 'application/json', 'X-Correlation-Id': correlationId })
     if (rule.bearer) headers.set('Authorization', `Bearer ${accessToken}`)
+    // Core registra el User-Agent en la auditoría: sin esto, toda acción del panel figura como `node`.
+    if (ctx.userAgent) headers.set('User-Agent', ctx.userAgent)
     const contentType = request.headers.get('content-type')
     if (body && contentType) headers.set('Content-Type', contentType)
     return fetch(target, { method: request.method, headers, body, cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(60_000) })
