@@ -16,6 +16,8 @@ const MESSAGES: Record<string, string> = {
   'Auth.RefreshTokenReused': 'La sesión se cerró por seguridad. Iniciá sesión nuevamente.',
   'Auth.InvalidAppCredentials': 'El servidor del panel no tiene bien configuradas las credenciales de la app core.',
   'Auth.ApplicationSuspended': 'La aplicación core está suspendida.',
+  'Auth.InvalidCallbackUrl': 'La URL de la página de aceptación no es válida: tiene que ser una URL completa (http o https) de la página de la aplicación.',
+  'Auth.InvalidOneTimeToken': 'El link venció o ya se usó. Pedile a un administrador que te reenvíe la invitación.',
   'RateLimit.Exceeded': 'Demasiados intentos.',
   'Request.TooLarge': 'El contenido es demasiado grande.',
   // Aplicaciones
@@ -49,12 +51,13 @@ const MESSAGES: Record<string, string> = {
   // Usuarios
   'Users.InvalidEmail': 'El email no es válido.',
   'Users.InvalidFullName': 'El nombre completo no es válido.',
-  'Users.WeakPassword': 'La contraseña es demasiado débil.',
+  'Users.WeakPassword': 'La contraseña no es válida: tiene que tener entre 10 y 128 caracteres y no puede ser solo espacios.',
   'Users.EmailTaken': 'Ya existe un usuario con ese email.',
   'Users.NotFound': 'El usuario no existe.',
   'Users.InvalidLockReason': 'El motivo de bloqueo no es válido.',
   'Users.AlreadyLocked': 'El usuario ya está bloqueado.',
   'Users.NotLocked': 'El usuario no está bloqueado.',
+  'Users.EmailAlreadyVerified': 'El usuario ya aceptó la invitación (su email está verificado): no hace falta reenviarla.',
   'Users.InvalidSearch': 'La búsqueda no es válida.',
   'Users.InvalidStatus': 'Estado de usuario inválido.',
   'Users.InvalidPage': 'Página inválida.',

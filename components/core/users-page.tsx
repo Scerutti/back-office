@@ -2,13 +2,14 @@
 
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, History, LockKeyhole, Plus, RefreshCw, ShieldCheck, UnlockKeyhole, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, History, LockKeyhole, Plus, RefreshCw, UnlockKeyhole, X } from 'lucide-react'
 import useSWR from 'swr'
 import { coreJson, fetcher, jsonBody, logout, seg } from '@/lib/core-client'
-import { RESERVED_APP_KEY, RESERVED_ROLE_NAME, USER_STATUS, toNumber, type CoreApp, type CoreCreateUser, type CoreLockUser, type CoreReplaceUserRoles, type CoreRevokeSessions, type CoreRole, type CoreUpdateUser, type CoreUser, type CoreUserDetail, type CoreUserPage, type CoreUserSession } from '@/lib/core-api/types'
+import { RESERVED_APP_KEY, RESERVED_ROLE_NAME, USER_STATUS, toNumber, type CoreApp, type CoreLockUser, type CoreReplaceUserRoles, type CoreRevokeSessions, type CoreRole, type CoreUpdateUser, type CoreUser, type CoreUserDetail, type CoreUserPage, type CoreUserSession } from '@/lib/core-api/types'
 import { formatUtc } from './overview-apps'
 import { DisabledReason, EmptyState, ErrorNotice, Field, LoadingState, Modal, PageErrorNotice, PageHeading, Panel, PrimaryButton, SecondaryButton, StatusBadge, isCurrentUser, useConfirm, useCurrentSession, useDialogBehavior } from './shared'
 import { useUrlParams, userHistoryHref } from './url-state'
+import { CreateUserModal, PendingInvitation, RoleCheckboxes } from './user-invitations'
 
 const PAGE_SIZE = 20
 const LOCK_REASON_MAX = 500
@@ -33,7 +34,7 @@ export function UsersPage() {
   const selectedUserId = params.get('id')
   const [search, setSearch] = useState(urlSearch)
   const [creating, setCreating] = useState(false)
-  const [creatingBusy, setCreatingBusy] = useState(false)
+  const [pageNotice, setPageNotice] = useState('')
   const [errorAction, setErrorAction] = useState<unknown>(null)
   const confirm = useConfirm()
   const session = useCurrentSession()
@@ -52,35 +53,16 @@ export function UsersPage() {
   const key = `api/users?${query.toString()}`
   const { data, error, isLoading, mutate: refresh } = useSWR<CoreUserPage>(key, fetcher<CoreUserPage>, { keepPreviousData: true })
 
-  async function createUser(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (creatingBusy) return
-    const form = new FormData(event.currentTarget)
-    const payload: CoreCreateUser = { email: String(form.get('email')).trim(), fullName: String(form.get('fullName')).trim(), password: String(form.get('password')) }
-    setErrorAction(null); setCreatingBusy(true)
-    try {
-      await coreJson<CoreUser>('api/users', { method: 'POST', ...jsonBody(payload) })
-      setCreating(false)
-      await refresh()
-    } catch (caught) { setErrorAction(caught) }
-    finally { setCreatingBusy(false) }
-  }
-
-  function closeCreate() {
-    if (creatingBusy) return
-    setCreating(false); setErrorAction(null)
-  }
-
   return <>
-    <PageHeading eyebrow="IDENTIDAD · DIRECTORIO" title="Usuarios" description="Administrá identidades globales, estados y accesos a aplicaciones." action={<PrimaryButton onClick={() => { setErrorAction(null); setCreating(true) }}><Plus aria-hidden="true" /> Crear usuario</PrimaryButton>} />
-    {error ? <ErrorNotice error={error} /> : null}<PageErrorNotice error={errorAction} onDismiss={() => setErrorAction(null)} />
+    <PageHeading eyebrow="IDENTIDAD · DIRECTORIO" title="Usuarios" description="Administrá identidades globales, estados y accesos a aplicaciones." action={<PrimaryButton onClick={() => { setErrorAction(null); setPageNotice(''); setCreating(true) }}><Plus aria-hidden="true" /> Crear usuario</PrimaryButton>} />
+    {error ? <ErrorNotice error={error} /> : null}<PageErrorNotice error={errorAction} onDismiss={() => setErrorAction(null)} />{pageNotice && <p className="core-success-note core-page-notice" role="status">{pageNotice}</p>}
     <div className="core-toolbar core-user-toolbar"><label className="core-search"><span className="sr-only">Buscar por email o nombre</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o email…" /></label><select className="core-select" value={status} onChange={(event) => setParams({ estado: event.target.value, pagina: null })} aria-label="Filtrar por estado"><option value="">Todos los estados</option><option value={USER_STATUS.Active}>Activos</option><option value={USER_STATUS.Locked}>Bloqueados</option></select><span className="core-result-count">{data ? `${toNumber(data.totalCount).toLocaleString('es-AR')} usuarios` : '—'}</span><button type="button" className="core-icon-button" aria-label="Actualizar usuarios" onClick={() => void refresh()}><RefreshCw aria-hidden="true" /></button></div>
     <Panel className="core-table-panel">{isLoading && !data ? <LoadingState /> : !data?.items.length ? <EmptyState title="No se encontraron usuarios" detail="Probá con otros filtros de búsqueda." /> : <div className="core-table-scroll"><table className="core-table"><thead><tr><th>USUARIO</th><th>EMAIL</th><th>ESTADO</th><th>EMAIL VERIFICADO</th><th>ÚLTIMO ACCESO</th><th>CREADO</th><th>ACCIONES</th></tr></thead><tbody>{data.items.map((user) => {
       const self = isCurrentUser(session, user)
       return <tr key={user.id}><td><button type="button" className="core-link-button" onClick={() => setParams({ id: user.id })}>{user.fullName}</button>{self && <small className="core-cell-subtitle">Vos</small>}</td><td>{user.email}</td><td><StatusBadge tone={user.status === USER_STATUS.Active ? 'success' : 'warning'}>{user.status}</StatusBadge></td><td>{user.emailVerifiedAtUtc ? <StatusBadge tone="success">Verificado</StatusBadge> : <StatusBadge tone="warning">No verificado</StatusBadge>}</td><td>{formatUtc(user.lastLoginAtUtc)}</td><td>{formatUtc(user.createdAtUtc)}</td><td><div className="core-action-group"><SecondaryButton onClick={() => setParams({ id: user.id })} aria-label={`Ver detalle de ${user.fullName}`}>Detalle</SecondaryButton><LockButton user={user} self={self} onDone={refresh} confirm={confirm} /></div></td></tr>
     })}</tbody></table></div>}</Panel>
     {data && (() => { const pageSize = toNumber(data.pageSize); const total = toNumber(data.totalCount); return <div className="core-pagination"><span>Mostrando {data.items.length ? ((page - 1) * pageSize + 1).toLocaleString('es-AR') : 0}–{Math.min(page * pageSize, total).toLocaleString('es-AR')} de {total.toLocaleString('es-AR')}</span><div><SecondaryButton disabled={page <= 1} onClick={() => setParams({ pagina: page - 1 > 1 ? String(page - 1) : null })}><ChevronLeft aria-hidden="true" /> Anterior</SecondaryButton><span>Página {toNumber(data.page)}</span><SecondaryButton disabled={page * pageSize >= total} onClick={() => setParams({ pagina: String(page + 1) })}>Siguiente <ChevronRight aria-hidden="true" /></SecondaryButton></div></div> })()}
-    {creating && <Modal title="Crear usuario" onClose={closeCreate}>{errorAction ? <ErrorNotice error={errorAction} /> : null}<form className="core-form" onSubmit={createUser}><Field label="Email"><input type="email" name="email" className="core-input" autoComplete="off" required maxLength={320} /></Field><Field label="Nombre completo"><input name="fullName" className="core-input" required maxLength={200} /></Field><Field label="Contraseña inicial" hint="Entre 10 y 128 caracteres. La cuenta se crea con el email verificado."><input type="password" name="password" className="core-input" autoComplete="new-password" required minLength={10} maxLength={128} /></Field><div className="core-inline-note"><ShieldCheck aria-hidden="true" /> No se enviará una invitación por correo.</div><div className="core-form-actions"><SecondaryButton disabled={creatingBusy} onClick={closeCreate}>Cancelar</SecondaryButton><PrimaryButton type="submit" disabled={creatingBusy}>{creatingBusy ? 'Creando…' : 'Crear usuario'}</PrimaryButton></div></form></Modal>}
+    {creating && <CreateUserModal onClose={() => setCreating(false)} onDone={async (message) => { setCreating(false); setPageNotice(message); await refresh() }} />}
     {selectedUserId && <UserDrawer key={selectedUserId} userId={selectedUserId} onClose={() => setParams({ id: null })} onChanged={() => void refresh()} />}
   </>
 }
@@ -189,6 +171,7 @@ function UserDrawer({ userId, onClose, onChanged }: { userId: string; onClose: (
       {!editOpen && actionError ? <ErrorNotice error={actionError} onDismiss={() => setActionError(null)} /> : null}
       {notice && <p className="core-success-note" role="status">{notice}</p>}
       <section className="core-detail-section"><div className="core-section-title"><h3>Datos personales</h3><div className="core-action-group"><LockButton user={user} self={self} confirm={confirm} onDone={async () => { setNotice(''); await refreshUser() }} /><SecondaryButton onClick={() => { setActionError(null); setEditOpen(true) }}>Editar</SecondaryButton></div></div><p><span>Nombre completo</span><strong>{user.fullName}</strong></p><p><span>Email</span><strong>{user.email}</strong></p><p><span>Verificación</span><strong>{user.emailVerifiedAtUtc ? `Verificado · ${formatUtc(user.emailVerifiedAtUtc)}` : 'No verificado'}</strong></p><p><span>Creado</span><strong>{formatUtc(user.createdAtUtc)}</strong></p>{user.status === USER_STATUS.Locked && <p><span>Bloqueado</span><strong>{formatUtc(user.lockedAtUtc)}{user.lockReason ? ` · ${user.lockReason}` : ''}</strong></p>}</section>
+      {!user.emailVerifiedAtUtc && <PendingInvitation key={user.applications.map((app) => app.appKey).join('|')} user={user} onError={setActionError} onSent={(message) => { setActionError(null); setNotice(message) }} />}
       <section className="core-detail-section"><div className="core-section-title"><h3>Aplicaciones y roles</h3></div>{user.applications?.length ? user.applications.map((app) => <AccessEditor key={app.appKey} userId={user.id} userName={user.fullName} self={self} app={app} onError={setActionError} onSaved={refreshUser} />) : <EmptyState title="Sin accesos asignados" detail="Este usuario todavía no tiene aplicaciones." />}<GrantAccess userId={user.id} assigned={user.applications.map((app) => app.appKey)} onError={setActionError} onSaved={refreshUser} /></section>
       <section className="core-detail-section"><div className="core-section-title"><div><h3>Sesiones activas</h3><p>{sessionCount} {sessionCount === 1 ? 'sesión' : 'sesiones'}</p></div><DisabledReason reason={sessions && !sessionCount ? 'No tiene sesiones activas.' : null}><SecondaryButton disabled={!sessionCount} onClick={() => revokeSessions()}>Cerrar sesiones</SecondaryButton></DisabledReason></div>{sessionsError && <ErrorNotice error={sessionsError} />}{sessions?.length ? sessions.map((session) => <div className="core-session-row" key={session.familyId}><div><strong>{session.appKey}</strong><small>{session.ipAddress || '—'} · {session.userAgent || '—'}</small><small>Inicio {formatUtc(session.startedAtUtc)} · Última renovación {formatUtc(session.lastRotatedAtUtc)} · Vence {formatUtc(session.expiresAtUtc)}</small></div><SecondaryButton onClick={() => revokeSessions(session.appKey)} aria-label={`Cerrar todas las sesiones de ${session.appKey}`}>Cerrar</SecondaryButton></div>) : !sessionsError && <EmptyState title="No hay sesiones activas" detail="Las sesiones vigentes aparecerán aquí." />}</section>
       <section className="core-detail-section"><div className="core-section-title"><h3>Historial</h3></div><Link className="core-history-link" href={userHistoryHref(user.id)}><History aria-hidden="true" /> Ver eventos de este usuario en Auditoría</Link><p className="core-detail-note">Incluye los eventos sobre el usuario (bloqueos, cambios de datos, sesiones) y las acciones que hizo él. Los cambios de acceso a aplicaciones se registran con el id del acceso, no del usuario: se ven en Auditoría con <code>entityType = UserApplicationAccess</code>.</p></section>
@@ -239,14 +222,6 @@ function AccessEditor({ userId, userName, self, app, onError, onSaved }: { userI
   return <div className="core-access-card"><div className="core-access-title"><strong>{app.name}</strong><code>{app.appKey}</code></div>{error && <ErrorNotice error={error} />}{roles ? <RoleCheckboxes roles={roles} selected={selected} onChange={setSelected} lockedReason={(role) => (protectedRole(role) ? SELF.adminRole : null)} /> : !error && <LoadingState label="Cargando roles…" />}<div className="core-access-actions"><DisabledReason reason={self && isCore ? SELF.removeCore : null}><SecondaryButton disabled={busy || (self && isCore)} onClick={removeAccess}>Quitar acceso</SecondaryButton></DisabledReason><PrimaryButton disabled={busy || !roles || selected.join('|') === currentKey} onClick={() => void saveRoles()}>{busy ? 'Guardando…' : 'Guardar roles'}</PrimaryButton></div></div>
 }
 
-function RoleCheckboxes({ roles, selected, onChange, lockedReason }: { roles: CoreRole[]; selected: string[]; onChange: (next: string[]) => void; lockedReason?: (role: CoreRole) => string | null }) {
-  if (!roles.length) return <p className="core-detail-note">Esta aplicación no tiene roles.</p>
-  return <div className="core-role-checkboxes">{roles.map((role) => {
-    const reason = lockedReason?.(role) ?? null
-    const box = <label key={role.id}><input type="checkbox" checked={selected.includes(role.id)} disabled={Boolean(reason)} aria-label={`Rol ${role.name}${role.isDefault ? ' (predeterminado)' : ''}`} onChange={(event) => onChange(event.target.checked ? [...selected, role.id] : selected.filter((value) => value !== role.id))} /><span>{role.name}{role.isDefault && <small>Predeterminado</small>}</span></label>
-    return reason ? <DisabledReason key={role.id} reason={reason}>{box}</DisabledReason> : box
-  })}</div>
-}
 
 // Dar acceso a una app que el usuario todavía no tiene: se eligen los roles antes de confirmar
 // (el predeterminado viene tildado) y se manda PUT .../users/{userId}/roles con esos ids.
