@@ -204,6 +204,20 @@ export async function coreLogout(config: CoreConfig, ctx: AuthContext, refreshTo
   }
 }
 
+/**
+ * Acepta una invitación a `core`: Core fija la contraseña y verifica el email. Es una ruta M2M
+ * (/api/auth/*), así que va con las credenciales de la app `core`, no por el proxy de admin.
+ */
+export async function coreAcceptInvitation(config: CoreConfig, ctx: AuthContext, token: string, password: string): Promise<{ ok: true } | { ok: false; problem: Problem; retryAfter?: string | null }> {
+  try {
+    const result = await authClient(config, ctx).POST('/api/auth/accept-invitation', { body: { token, password }, signal: AbortSignal.timeout(20_000) })
+    if (result.response.ok) return { ok: true }
+    return { ok: false, problem: normalizeProblem(result.response.status, result.error, result.response.headers.get('X-Correlation-Id')), retryAfter: result.response.headers.get('Retry-After') }
+  } catch {
+    return { ok: false, problem: { status: 502, errorCode: 'Bff.CoreUnavailable', correlationId: ctx.correlationId } }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Refresh serializado por sesión.
 // Cada refresh token se puede usar UNA sola vez: si dos requests en paralelo lo usan, la API

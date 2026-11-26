@@ -38,6 +38,7 @@ Cada sección tiene su URL. Los detalles abiertos y los filtros van en la query 
 | `/templates?key=<templateKey>` | Templates de email |
 | `/auditoria?entityType=…&entityId=…` | Auditoría con filtros (`?usuario=<userId>` muestra el historial de un usuario) |
 | `/seguridad` | Seguridad (JWKS) |
+| `/aceptar-invitacion?token=…` | Página pública (sin sesión) donde un admin invitado a `core` elige su contraseña |
 
 ### Estructura
 

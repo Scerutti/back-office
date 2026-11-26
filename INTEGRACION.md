@@ -10,6 +10,7 @@ Navegador ──cookie HttpOnly──► BFF (rutas de servidor de Next.js) ─�
 |---|---|
 | `POST /api/auth/login` | Si el navegador ya tenía una cookie de refresh, primero cierra esa sesión en Core (`POST /api/auth/logout`) para no dejarla activa 30 días. Después llama a `POST /api/auth/login` de Core con `X-App-Key`, `X-App-Secret`, `X-End-User-Ip` y el `User-Agent` del navegador, y guarda los tokens en cookies HttpOnly. |
 | `GET /api/auth/session` | Devuelve nombre y email (claims del JWT). Si el token vence en menos de 60 s, hace refresh. |
+| `POST /api/auth/accept-invitation` | Para la página pública `/aceptar-invitacion`: llama a `POST /api/auth/accept-invitation` de Core con las credenciales de la app `core` (headers M2M + IP + User-Agent). No requiere sesión. Existe aparte porque el proxy bloquea `/api/auth/*`. |
 | `POST /api/auth/logout` | `POST /api/auth/logout` de Core (headers M2M + IP) y borra las cookies. |
 | `/api/core/<ruta>` | Proxy hacia las rutas de admin de Core, con Bearer y el `User-Agent` del navegador (Core lo registra en la auditoría). Tiene una lista de rutas permitidas: las M2M (`/api/auth/*`, `/api/notifications`, `/api/apps/me`) quedan bloqueadas. |
 
