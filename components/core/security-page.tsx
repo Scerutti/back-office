@@ -4,9 +4,10 @@ import { Fingerprint, ShieldCheck } from 'lucide-react'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/core-client'
 import type { CoreJwks } from '@/lib/core-api/types'
-import { EmptyState, ErrorNotice, LoadingState, PageHeading, Panel, StatusBadge } from './shared'
+import { EmptyState, ErrorNotice, LoadingState, PageHeading, Panel, StatusBadge, useCurrentSession } from './shared'
 
-export function SecurityPage({ jwksUrl }: { jwksUrl: string }) {
+export function SecurityPage() {
+  const jwksUrl = useCurrentSession()?.jwksUrl ?? ''
   // Las claves se piden a través del BFF; la URL se muestra solo como referencia (no es un link
   // para que el navegador no llame a la API directo).
   const { data, error, isLoading } = useSWR<CoreJwks>('.well-known/jwks.json', fetcher<CoreJwks>)
