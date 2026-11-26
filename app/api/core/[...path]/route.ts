@@ -32,6 +32,9 @@ const RULES: Array<{ pattern: RegExp; methods: Method[]; bearer: boolean }> = [
   { pattern: new RegExp(`^api/apps/${SEG}/users/${SEG}$`), methods: ['DELETE'], bearer: true },
   { pattern: new RegExp(`^api/apps/${SEG}/users/${SEG}/roles$`), methods: ['PUT'], bearer: true },
   { pattern: /^api\/users$/, methods: ['GET', 'POST'], bearer: true },
+  // Antes que api/users/{id}: si no, "invitations" se toma como id y POST da 405.
+  { pattern: /^api\/users\/invitations$/, methods: ['POST'], bearer: true },
+  { pattern: new RegExp(`^api/users/${SEG}/invitations$`), methods: ['POST'], bearer: true },
   { pattern: new RegExp(`^api/users/${SEG}$`), methods: ['GET', 'PUT'], bearer: true },
   { pattern: new RegExp(`^api/users/${SEG}/(lock|unlock)$`), methods: ['POST'], bearer: true },
   { pattern: new RegExp(`^api/users/${SEG}/sessions$`), methods: ['GET', 'DELETE'], bearer: true },
