@@ -1,26 +1,17 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { ToastProvider } from '@/components/core/toast'
 import './globals.css'
 import './core.css'
 
 export const metadata: Metadata = {
   title: 'HREF Core · Backoffice',
   description: 'Backoffice de administración para HREF Core: aplicaciones, identidades, roles, templates y auditoría.',
-  generator: 'v0.app',
   icons: {
+    // Marca del panel (la "H" del sidebar). El SVG lo usan los navegadores actuales; el PNG, el resto.
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-32x32.png', sizes: '32x32', type: 'image/png' },
     ],
     apple: '/apple-icon.png',
   },
@@ -39,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="es-AR">
       <body className="antialiased">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

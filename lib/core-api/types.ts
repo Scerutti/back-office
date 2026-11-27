@@ -40,8 +40,10 @@ export type CoreUpdateTemplate = Schemas['UpdateEmailTemplateRequest']
 export type CorePreviewTemplate = Schemas['PreviewEmailTemplateRequest']
 export type CoreTemplatePreview = Schemas['EmailTemplatePreviewResponse']
 
-export type CoreAuditRow = Schemas['AuditLogResponse']
-export type CoreAuditPage = Schemas['AuditLogPageResponse']
+// Core v0.8.0 (hrefsolutions/Core#129) agrega `applicationId` a cada evento. El contrato publicado
+// en producción todavía es el anterior: cuando se regenere schema.d.ts contra v0.8.0, borrar la extensión.
+export type CoreAuditRow = Schemas['AuditLogResponse'] & { applicationId?: string | null }
+export type CoreAuditPage = Omit<Schemas['AuditLogPageResponse'], 'items'> & { items: CoreAuditRow[] }
 
 export type CoreHealth = Schemas['HealthResponse']
 export type CoreJwks = Schemas['JsonWebKeySetResponse']

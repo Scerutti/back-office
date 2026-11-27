@@ -53,5 +53,11 @@ export function auditEventHref(event: { id: string; action: string; entityType: 
   return hrefWith(ROUTES.audit, { action: event.action, actorId: event.actorId, evento: event.id })
 }
 
+/**
+ * Auditoría de una aplicación: filtra por su id y no por appKey (si se borra una app y se crea otra
+ * con el mismo key, el filtro por appKey mezcla el historial de las dos).
+ */
+export const appAuditHref = (applicationId: string) => hrefWith(ROUTES.audit, { applicationId })
+
 /** Historial de un usuario en Auditoría: eventos con entityId = usuario o actorId = usuario. */
 export const userHistoryHref = (userId: string) => hrefWith(ROUTES.audit, { usuario: userId })

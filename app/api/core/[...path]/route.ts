@@ -20,7 +20,7 @@ const RULES: Array<{ pattern: RegExp; methods: Method[]; bearer: boolean }> = [
   { pattern: /^health$/, methods: ['GET'], bearer: false },
   { pattern: /^\.well-known\/jwks\.json$/, methods: ['GET'], bearer: false },
   { pattern: /^api\/apps$/, methods: ['GET', 'POST'], bearer: true },
-  { pattern: /^api\/apps\/(?!me$)[^/]+$/, methods: ['GET', 'PUT'], bearer: true },
+  { pattern: /^api\/apps\/(?!me$)[^/]+$/, methods: ['GET', 'PUT', 'DELETE'], bearer: true },
   { pattern: new RegExp(`^api/apps/${SEG}/status$`), methods: ['PATCH'], bearer: true },
   { pattern: new RegExp(`^api/apps/${SEG}/secret/rotate$`), methods: ['POST'], bearer: true },
   { pattern: new RegExp(`^api/apps/${SEG}/permissions$`), methods: ['GET', 'POST'], bearer: true },
@@ -35,7 +35,7 @@ const RULES: Array<{ pattern: RegExp; methods: Method[]; bearer: boolean }> = [
   // Antes que api/users/{id}: si no, "invitations" se toma como id y POST da 405.
   { pattern: /^api\/users\/invitations$/, methods: ['POST'], bearer: true },
   { pattern: new RegExp(`^api/users/${SEG}/invitations$`), methods: ['POST'], bearer: true },
-  { pattern: new RegExp(`^api/users/${SEG}$`), methods: ['GET', 'PUT'], bearer: true },
+  { pattern: new RegExp(`^api/users/${SEG}$`), methods: ['GET', 'PUT', 'DELETE'], bearer: true },
   { pattern: new RegExp(`^api/users/${SEG}/(lock|unlock)$`), methods: ['POST'], bearer: true },
   { pattern: new RegExp(`^api/users/${SEG}/sessions$`), methods: ['GET', 'DELETE'], bearer: true },
   { pattern: /^api\/notifications\/templates$/, methods: ['GET', 'POST'], bearer: true },

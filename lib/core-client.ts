@@ -14,6 +14,8 @@ export class CoreApiError extends Error {
   correlationId: string
   retryAfter: string | null
   fieldErrors: Record<string, string[]> | null
+  /** El BFF cerró la sesión (refresh rechazado o 403 Auth.AdminRequired): lo avisa la pantalla de login. */
+  sessionEnded = false
 
   constructor(status: number, body: Record<string, unknown>, retryAfter: string | null, headerCorrelationId?: string | null) {
     super(typeof body.title === 'string' ? body.title : 'No se pudo completar la solicitud.')
@@ -83,7 +85,7 @@ export async function coreFetch(path: string, init: RequestInit = {}) {
   const response = await fetch(`/api/core/${path.replace(/^\/+/, '')}`, { ...init, cache: 'no-store', credentials: 'same-origin' })
   if (!response.ok) {
     const error = await toError(response)
-    if (response.headers.get('X-Session-Ended')) sessionEnded(error)
+    if (response.headers.get('X-Session-Ended')) { error.sessionEnded = true; sessionEnded(error) }
     throw error
   }
   return response
