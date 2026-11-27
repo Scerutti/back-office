@@ -5,7 +5,8 @@ import { MailPlus, Send, ShieldCheck } from 'lucide-react'
 import useSWR from 'swr'
 import { coreJson, fetcher, jsonBody, seg } from '@/lib/core-client'
 import { RESERVED_APP_KEY, type CoreApp, type CoreCreateUser, type CoreInviteUser, type CoreResendInvitation, type CoreRole, type CoreUser, type CoreUserDetail } from '@/lib/core-api/types'
-import { DisabledReason, ErrorNotice, Field, LoadingState, Modal, PrimaryButton, SecondaryButton, StatusBadge } from './shared'
+import { DisabledReason, ErrorNotice, Field, LoadingState, Modal, PrimaryButton, SecondaryButton, StatusBadge, fieldError } from './shared'
+import { useToast } from './toast'
 
 // ---------------------------------------------------------------------------------------------
 // URL de la página de aceptación. Para `core` es la página pública de este panel; para las demás
@@ -49,8 +50,11 @@ type Mode = 'invite' | 'password'
 export function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => Promise<unknown> | void }) {
   const [mode, setMode] = useState<Mode>('invite')
   const [busy, setBusy] = useState(false)
+  // Error de un campo (email, nombre, contraseña): se muestra debajo del campo; los demás, toast.
   const [error, setError] = useState<unknown>(null)
+  const toast = useToast()
   const close = () => { if (!busy) onClose() }
+  const fields = mode === 'invite' ? INVITE_FIELDS : PASSWORD_FIELDS
 
   async function run(action: () => Promise<string>) {
     if (busy) return
@@ -59,42 +63,43 @@ export function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDo
       const message = await action()
       await onDone(message)
     } catch (caught) {
-      setError(caught)
+      toast.formError(caught, fields, setError)
       setBusy(false)
     }
   }
 
   return <Modal title="Crear usuario" onClose={close}>
-    {error ? <ErrorNotice error={error} /> : null}
     <div className="core-segmented" role="radiogroup" aria-label="Cómo crear el usuario">
       {([['invite', 'Invitar por mail'], ['password', 'Crear con contraseña']] as const).map(([value, label]) => <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? 'is-active' : ''} disabled={busy} onClick={() => { setMode(value); setError(null) }}>{label}</button>)}
     </div>
-    {mode === 'invite' ? <InviteForm busy={busy} onCancel={close} onSubmit={run} /> : <PasswordForm busy={busy} onCancel={close} onSubmit={run} />}
+    {mode === 'invite' ? <InviteForm busy={busy} error={error} onCancel={close} onSubmit={run} /> : <PasswordForm busy={busy} error={error} onCancel={close} onSubmit={run} />}
   </Modal>
 }
 
-type FormProps = { busy: boolean; onCancel: () => void; onSubmit: (action: () => Promise<string>) => void }
+const PASSWORD_FIELDS = ['email', 'fullName', 'password'] as const
+const INVITE_FIELDS = ['email', 'fullName'] as const
+type FormProps = { busy: boolean; error: unknown; onCancel: () => void; onSubmit: (action: () => Promise<string>) => void }
 
-function PasswordForm({ busy, onCancel, onSubmit }: FormProps) {
+function PasswordForm({ busy, error, onCancel, onSubmit }: FormProps) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const payload: CoreCreateUser = { email: String(form.get('email')).trim(), fullName: String(form.get('fullName')).trim(), password: String(form.get('password')) }
     onSubmit(async () => {
       await coreJson<CoreUser>('api/users', { method: 'POST', ...jsonBody(payload) })
-      return `Usuario ${payload.email} creado.`
+      return 'Usuario creado.'
     })
   }
   return <form className="core-form" onSubmit={submit}>
-    <Field label="Email"><input type="email" name="email" className="core-input" autoComplete="off" required maxLength={320} /></Field>
-    <Field label="Nombre completo"><input name="fullName" className="core-input" required maxLength={200} /></Field>
-    <Field label="Contraseña inicial" hint="Entre 10 y 128 caracteres. La cuenta se crea con el email verificado."><input type="password" name="password" className="core-input" autoComplete="new-password" required minLength={10} maxLength={128} /></Field>
+    <Field label="Email" error={fieldError(error, 'email')}><input type="email" name="email" className="core-input" autoComplete="off" required maxLength={320} /></Field>
+    <Field label="Nombre completo" error={fieldError(error, 'fullName')}><input name="fullName" className="core-input" required maxLength={150} /></Field>
+    <Field label="Contraseña inicial" error={fieldError(error, 'password')} hint="Entre 10 y 128 caracteres. La cuenta se crea con el email verificado."><input type="password" name="password" className="core-input" autoComplete="new-password" required minLength={10} maxLength={128} /></Field>
     <div className="core-inline-note"><ShieldCheck aria-hidden="true" /> No se envía ningún correo: pasale la contraseña al usuario por un canal seguro.</div>
     <div className="core-form-actions"><SecondaryButton disabled={busy} onClick={onCancel}>Cancelar</SecondaryButton><PrimaryButton type="submit" disabled={busy}>{busy ? 'Creando…' : 'Crear usuario'}</PrimaryButton></div>
   </form>
 }
 
-function InviteForm({ busy, onCancel, onSubmit }: FormProps) {
+function InviteForm({ busy, error, onCancel, onSubmit }: FormProps) {
   const { data: apps, error: appsError } = useSWR<CoreApp[]>('api/apps', fetcher<CoreApp[]>)
   const [appKey, setAppKey] = useState('')
   const [acceptUrl, setAcceptUrl] = useState('')
@@ -115,13 +120,13 @@ function InviteForm({ busy, onCancel, onSubmit }: FormProps) {
     onSubmit(async () => {
       await coreJson<CoreUser>('api/users/invitations', { method: 'POST', ...jsonBody(payload) })
       rememberAcceptUrl(appKey, payload.acceptInvitationUrl ?? '')
-      return `Invitación enviada a ${payload.email}. El link vence en 72 horas.`
+      return `Invitación enviada a ${payload.email}.`
     })
   }
 
   return <form className="core-form" onSubmit={submit}>
-    <Field label="Email"><input type="email" name="email" className="core-input" autoComplete="off" required maxLength={320} /></Field>
-    <Field label="Nombre completo"><input name="fullName" className="core-input" required maxLength={200} /></Field>
+    <Field label="Email" error={fieldError(error, 'email')}><input type="email" name="email" className="core-input" autoComplete="off" required maxLength={320} /></Field>
+    <Field label="Nombre completo" error={fieldError(error, 'fullName')}><input name="fullName" className="core-input" required maxLength={150} /></Field>
     {appsError ? <ErrorNotice error={appsError} /> : null}
     <Field label="Aplicación" hint="El usuario recibe acceso a esta aplicación y el email lo lleva a su página de aceptación."><select className="core-input" value={appKey} required onChange={(event) => chooseApp(event.target.value)}><option value="">Seleccioná una aplicación</option>{apps?.map((app) => <option key={app.appKey} value={app.appKey}>{app.name} · {app.appKey}</option>)}</select></Field>
     {appKey && <div className="core-field"><span className="core-field-label">Roles</span>{rolesError ? <ErrorNotice error={rolesError} /> : roles ? <RoleCheckboxes roles={roles} selected={selectedRoles} onChange={setRoleIds} /> : <LoadingState label="Cargando roles…" />}{roles?.some((role) => role.isDefault) && <small>El rol predeterminado ya viene tildado.</small>}</div>}
@@ -134,7 +139,8 @@ function InviteForm({ busy, onCancel, onSubmit }: FormProps) {
 // ---------------------------------------------------------------------------------------------
 // Detalle de usuario: invitación pendiente (email sin verificar) y reenvío.
 // ---------------------------------------------------------------------------------------------
-export function PendingInvitation({ user, onError, onSent }: { user: CoreUserDetail; onError: (error: unknown) => void; onSent: (message: string) => void }) {
+export function PendingInvitation({ user, onChanged }: { user: CoreUserDetail; onChanged: () => unknown }) {
+  const toast = useToast()
   const applications = user.applications ?? []
   const initialApp = applications.find((app) => app.appKey === RESERVED_APP_KEY)?.appKey ?? applications[0]?.appKey ?? ''
   const [appKey, setAppKey] = useState(initialApp)
@@ -144,14 +150,25 @@ export function PendingInvitation({ user, onError, onSent }: { user: CoreUserDet
   async function resend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !appKey) return
-    setBusy(true); onError(null)
+    setBusy(true)
     try {
       const body: CoreResendInvitation = { appKey, acceptInvitationUrl: acceptUrl.trim() }
+      // 202: se encoló el mail (info, no success).
       await coreJson(`api/users/${seg(user.id)}/invitations`, { method: 'POST', ...jsonBody(body) })
       rememberAcceptUrl(appKey, acceptUrl.trim())
-      onSent(`Invitación reenviada a ${user.email}. Los links anteriores dejaron de funcionar.`)
-    } catch (caught) { onError(caught) }
-    finally { setBusy(false) }
+      toast.info('Reenviamos la invitación. Los links anteriores dejaron de funcionar.')
+    } catch (caught) {
+      toast.fromError(caught, {
+        messages: {
+          'Users.NotFound': 'El usuario o la aplicación ya no existen.',
+          'Applications.NotFound': 'El usuario o la aplicación ya no existen.',
+          'Authorization.AccessNotFound': 'El usuario no tiene acceso a esa aplicación.',
+          'Users.AlreadyLocked': 'El usuario está bloqueado. Desbloquealo para reenviar la invitación.',
+        },
+        tones: { 'Authorization.AccessNotFound': 'warning', 'Users.AlreadyLocked': 'warning' },
+      })
+      void onChanged()
+    } finally { setBusy(false) }
   }
 
   return <section className="core-detail-section"><div className="core-section-title"><div><h3>Invitación pendiente</h3><p>El usuario todavía no eligió su contraseña ni verificó su email.</p></div><StatusBadge tone="warning">Pendiente</StatusBadge></div>

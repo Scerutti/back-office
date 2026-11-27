@@ -6,7 +6,8 @@ import { Tooltip } from '@base-ui/react/tooltip'
 import { AlertTriangle, LoaderCircle, MoreHorizontal, X } from 'lucide-react'
 import useSWR from 'swr'
 import { CoreApiError, CoreSession, SESSION_KEY, fetchSession } from '@/lib/core-client'
-import { errorMessage } from '@/lib/error-messages'
+import { errorField, errorMessage, type ErrorOverrides } from '@/lib/error-messages'
+import { useToast } from './toast'
 
 export function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
   return <div className="core-page-heading"><div><p className="core-eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{action && <div className="core-heading-action">{action}</div>}</div>
@@ -33,16 +34,6 @@ export function StatusBadge({ children, tone = 'neutral' }: { children: ReactNod
 export function ErrorNotice({ error, onDismiss }: { error: unknown; onDismiss?: () => void }) {
   const apiError = error instanceof CoreApiError ? error : null
   return <div className="core-error" role="alert"><AlertTriangle aria-hidden="true" /><div><strong>{errorMessage(error)}</strong><small>{apiError ? `Código: ${apiError.errorCode} · Correlation ID: ${apiError.correlationId}` : 'Volvé a intentar. Si el problema continúa, contactá soporte.'}</small></div>{onDismiss && <button type="button" aria-label="Cerrar aviso" onClick={onDismiss}><X aria-hidden="true" /></button>}</div>
-}
-
-/**
- * Aviso de error de la página. Mientras haya un modal o panel lateral abierto no se muestra: el
- * error ya aparece adentro del diálogo y el banner quedaría tapado por el overlay.
- */
-export function PageErrorNotice({ error, onDismiss }: { error: unknown; onDismiss?: () => void }) {
-  const overlayOpen = useOverlayOpen()
-  if (!error || overlayOpen) return null
-  return <ErrorNotice error={error} onDismiss={onDismiss} />
 }
 
 export function LoadingState({ label = 'Cargando datos…' }: { label?: string }) {
@@ -124,12 +115,24 @@ export function Modal({ title, children, onClose, wide = false, dismissible = tr
  * Campo con label asociado: el control hijo recibe `id` (y `aria-describedby` si hay ayuda),
  * así lectores de pantalla y tests encuentran el campo por su label.
  */
-export function Field({ label, children, hint }: { label: string; children: ReactElement<{ id?: string; 'aria-describedby'?: string }>; hint?: ReactNode }) {
+export function Field({ label, children, hint, error }: { label: string; children: ReactElement<{ id?: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }>; hint?: ReactNode; error?: string | null }) {
   const generatedId = useId()
   const hintId = useId()
+  const errorId = useId()
   const id = children.props.id ?? generatedId
-  const describedBy = [children.props['aria-describedby'], hint ? hintId : null].filter(Boolean).join(' ') || undefined
-  return <div className="core-field"><label htmlFor={id}>{label}</label>{isValidElement(children) ? cloneElement(children, { id, 'aria-describedby': describedBy }) : children}{hint && <small id={hintId}>{hint}</small>}</div>
+  const describedBy = [children.props['aria-describedby'], error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined
+  return <div className="core-field"><label htmlFor={id}>{label}</label>{isValidElement(children) ? cloneElement(children, { id, 'aria-describedby': describedBy, ...(error ? { 'aria-invalid': true } : {}) }) : children}{error && <small id={errorId} className="core-field-error-text" role="alert">{error}</small>}{hint && <small id={hintId}>{hint}</small>}</div>
+}
+
+/** Mensaje para mostrar debajo del campo `name` si el error de la API corresponde a ese campo. */
+export function fieldError(error: unknown, name: string) {
+  return errorField(error) === name ? errorMessage(error) : null
+}
+
+/** Error de un formulario que no corresponde a ninguno de sus campos (se muestra arriba del form). */
+export function formLevelError(error: unknown, fields: readonly string[]) {
+  const field = errorField(error)
+  return error && !(field && fields.includes(field)) ? error : null
 }
 
 /** Checkbox con label y descripción asociados (evita que se anuncie como "on"). */
@@ -200,8 +203,15 @@ export type ConfirmOptions = {
   reason?: { label: string; maxLength: number; hint?: string }
   /** Texto que hay que tipear para habilitar el botón (por ejemplo, la app key `core`). */
   requireText?: string
-  /** Si devuelve una promesa, el diálogo espera; si falla, muestra el error y sigue abierto. */
+  /**
+   * Si devuelve una promesa, el diálogo espera. Si falla: el error del campo de motivo se muestra
+   * debajo del campo; cualquier otro va como toast (con el tono que corresponde) y el diálogo se cierra.
+   */
   action: (reason: string) => unknown
+  /** Textos o tonos propios de esta acción para algunos `errorCode`. */
+  errors?: ErrorOverrides
+  /** Se llama cuando la acción falla (por ejemplo, para refrescar si el recurso ya no existe). */
+  onError?: (error: unknown) => unknown
 }
 
 type ConfirmState = ConfirmOptions & { resolve: (confirmed: boolean) => void }
@@ -224,6 +234,7 @@ function ConfirmDialog({ state, onDone }: { state: ConfirmState; onDone: (confir
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  const toast = useToast()
   const blocked = Boolean(state.requireText) && typed.trim() !== state.requireText
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -234,17 +245,18 @@ function ConfirmDialog({ state, onDone }: { state: ConfirmState; onDone: (confir
       await state.action(reason.trim())
       onDone(true)
     } catch (caught) {
-      setError(caught)
-      setBusy(false)
+      if (state.reason && errorField(caught) === 'reason') { setError(caught); setBusy(false); return }
+      toast.fromError(caught, state.errors)
+      void state.onError?.(caught)
+      onDone(false)
     }
   }
 
   const ConfirmButton = state.danger ? DangerButton : PrimaryButton
   return <Modal title={state.title} onClose={() => { if (!busy) onDone(false) }}>
-    {error ? <ErrorNotice error={error} /> : null}
     <form className="core-form" onSubmit={submit}>
       <div className="core-confirm-message">{state.message}</div>
-      {state.reason && <Field label={state.reason.label} hint={state.reason.hint ?? `Opcional. Máximo ${state.reason.maxLength} caracteres (${reason.length}/${state.reason.maxLength}).`}><textarea className="core-input core-textarea" value={reason} maxLength={state.reason.maxLength} onChange={(event) => setReason(event.target.value)} /></Field>}
+      {state.reason && <Field label={state.reason.label} error={fieldError(error, 'reason')} hint={state.reason.hint ?? `Opcional. Máximo ${state.reason.maxLength} caracteres (${reason.length}/${state.reason.maxLength}).`}><textarea className="core-input core-textarea" value={reason} maxLength={state.reason.maxLength} onChange={(event) => setReason(event.target.value)} /></Field>}
       {state.requireText && <Field label={`Escribí ${state.requireText} para confirmar`}><input className="core-input" value={typed} autoComplete="off" spellCheck={false} onChange={(event) => setTyped(event.target.value)} /></Field>}
       <div className="core-form-actions"><SecondaryButton disabled={busy} onClick={() => onDone(false)}>Cancelar</SecondaryButton><ConfirmButton type="submit" disabled={busy || blocked}>{busy ? 'Procesando…' : state.confirmLabel}</ConfirmButton></div>
     </form>

@@ -2,16 +2,19 @@
 
 import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { FileJson, FileSpreadsheet, Search, X } from 'lucide-react'
+import { ChevronDown, FileJson, FileSpreadsheet, Search, SlidersHorizontal, X } from 'lucide-react'
 import useSWR from 'swr'
 import { coreFetch, coreJson, fetcher, seg } from '@/lib/core-client'
 import { toNumber, type CoreApp, type CoreAuditPage, type CoreAuditRow, type CoreUserDetail } from '@/lib/core-api/types'
-import { AUDIT_ACTIONS, auditActionLabel, auditActorTypeLabel, auditEntityTypeLabel } from '@/lib/audit-labels'
+import { AUDIT_ACTIONS, auditActionLabel, auditActionText, auditActorTypeLabel, auditEntityTypeLabel } from '@/lib/audit-labels'
+import { errorField } from '@/lib/error-messages'
 import { formatUtc } from './overview-apps'
-import { DisabledReason, EmptyState, ErrorNotice, Field, LoadingState, PageHeading, Panel, SecondaryButton } from './shared'
+import { DisabledReason, EmptyState, ErrorNotice, Field, LoadingState, PageHeading, Panel, SecondaryButton, fieldError } from './shared'
+import { useToast } from './toast'
 import { ROUTES, useUrlParams } from './url-state'
 
-const FILTER_KEYS = ['from', 'to', 'appKey', 'actorType', 'actorId', 'action', 'entityType', 'entityId', 'correlationId'] as const
+// `applicationId` no está en el formulario: llega desde "Ver auditoría" de una aplicación y se muestra como aviso.
+const FILTER_KEYS = ['from', 'to', 'appKey', 'applicationId', 'actorType', 'actorId', 'action', 'entityType', 'entityId', 'correlationId'] as const
 type FilterKey = (typeof FILTER_KEYS)[number]
 type Filters = Record<FilterKey, string> & { page: string; pageSize: string }
 const PAGE_SIZES = ['25', '50', '100', '200']
@@ -67,8 +70,10 @@ export function AuditPage() {
   useEffect(() => { setDraft(active) }, [active])
   const [expanded, setExpanded] = useState<string | null>(highlighted)
   useEffect(() => { if (highlighted) setExpanded(highlighted) }, [highlighted])
-  const [exportError, setExportError] = useState<unknown>(null)
   const [exporting, setExporting] = useState(false)
+  // Los filtros arrancan colapsados para que la tabla quede a la vista; se abren solos si hay un error de fecha.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const toast = useToast()
 
   const pageKey = historyUserId ? null : `api/audit-logs?${apiQuery(active, { paged: true }).toString()}`
   const { data, error, isLoading } = useSWR<CoreAuditPage>(pageKey, fetcher<CoreAuditPage>, { keepPreviousData: true })
@@ -88,10 +93,11 @@ export function AuditPage() {
     const next: Record<string, string | null> = { usuario: null, evento: null, page: null, pageSize: draft.pageSize === '25' ? null : draft.pageSize }
     for (const key of FILTER_KEYS) next[key] = draft[key] || null
     setParams(next)
+    setFiltersOpen(false)
   }
 
   async function exportData(format: 'csv' | 'json') {
-    setExportError(null); setExporting(true)
+    setExporting(true)
     // El export no pagina: usa los mismos filtros y falla con AuditLogs.ExportTooLarge si pasa las 100.000 filas.
     const query = apiQuery(active, { paged: false })
     query.set('format', format)
@@ -103,7 +109,8 @@ export function AuditPage() {
       link.href = url
       link.download = `href-core-audit-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
-    } catch (caught) { setExportError(caught) }
+      toast.success('Exportación descargada.')
+    } catch (caught) { toast.fromError(caught) }
     finally { setExporting(false) }
   }
 
@@ -113,16 +120,23 @@ export function AuditPage() {
   }
 
   const exportReason = historyUserId ? 'El historial de un usuario combina dos búsquedas. Para exportar, filtrá por ID de la entidad o por ID del actor.' : null
+  const filteredApp = active.applicationId ? apps?.find((app) => app.id === active.applicationId) : null
+  // Los errores de fecha van debajo del campo "Desde"; el resto, en el aviso de la página.
+  const dateError = fieldError(viewError, 'from')
+  useEffect(() => { if (dateError) setFiltersOpen(true) }, [dateError])
+  // applicationId se muestra en su propio aviso: no cuenta como filtro del formulario.
+  const activeFilterCount = FILTER_KEYS.filter((key) => key !== 'applicationId' && active[key]).length
   const userLabel = historyUser.data ? `${historyUser.data.fullName} (${historyUser.data.email})` : historyUserId
 
   return <>
     <PageHeading eyebrow="CONTROL · TRAZABILIDAD" title="Auditoría" description="Filtrá eventos registrados y exportá hasta 100.000 filas con los mismos filtros." action={<div className="core-action-group"><DisabledReason reason={exportReason}><SecondaryButton disabled={exporting || Boolean(historyUserId)} onClick={() => void exportData('csv')}><FileSpreadsheet aria-hidden="true" /> CSV</SecondaryButton></DisabledReason><DisabledReason reason={exportReason}><SecondaryButton disabled={exporting || Boolean(historyUserId)} onClick={() => void exportData('json')}><FileJson aria-hidden="true" /> JSON</SecondaryButton></DisabledReason></div>} />
-    {viewError && <ErrorNotice error={viewError} />}{exportError && <ErrorNotice error={exportError} onDismiss={() => setExportError(null)} />}
+    {viewError && !errorField(viewError) && <ErrorNotice error={viewError} />}
+    {active.applicationId && !historyUserId && <div className="core-inline-note core-history-note"><div><strong>Auditoría de la aplicación {filteredApp ? `${filteredApp.name} (${filteredApp.appKey})` : <code>{active.applicationId}</code>}</strong><p>Filtra por el id de la aplicación: no incluye eventos de otra aplicación que haya usado el mismo key.{!filteredApp && apps ? ' La aplicación ya no existe; se muestra su historial.' : ''}</p></div><button type="button" className="core-icon-button" aria-label="Quitar el filtro de aplicación" onClick={() => setParams({ applicationId: null, page: null, evento: null })}><X aria-hidden="true" /></button></div>}
     {historyUserId && <div className="core-inline-note core-history-note"><div><strong>Historial de {userLabel}</strong><p>Eventos donde el usuario es la entidad (bloqueos, cambios de datos, cierre de sesiones) o el actor (lo que hizo él), unidos y ordenados por fecha; hasta {USER_HISTORY_LIMIT} de cada tipo. Los cambios de acceso a aplicaciones se registran con el id del acceso, no del usuario, así que no aparecen acá: buscalos con tipo de entidad <code>UserApplicationAccess</code>.</p></div><Link href={ROUTES.audit} className="core-icon-button" aria-label="Quitar el filtro de usuario"><X aria-hidden="true" /></Link></div>}
-    <Panel className="core-audit-filters"><form onSubmit={applyFilters}><div className="core-filter-grid">
-      <Field label="Desde"><input type="datetime-local" className="core-input" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} /></Field>
+    <Panel className={`core-audit-filters${filtersOpen ? ' is-open' : ''}`}><button type="button" className="core-filters-toggle" aria-expanded={filtersOpen} aria-controls="audit-filters-form" onClick={() => setFiltersOpen((open) => !open)}><SlidersHorizontal aria-hidden="true" /><strong>Filtros</strong>{activeFilterCount > 0 ? <span className="core-badge core-badge-neutral">{activeFilterCount} {activeFilterCount === 1 ? 'activo' : 'activos'}</span> : <small>Sin filtros aplicados</small>}<ChevronDown aria-hidden="true" className="core-filters-chevron" /></button><form id="audit-filters-form" hidden={!filtersOpen} onSubmit={applyFilters}><div className="core-filter-grid">
+      <Field label="Desde" error={dateError}><input type="datetime-local" className="core-input" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} /></Field>
       <Field label="Hasta"><input type="datetime-local" className="core-input" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} /></Field>
-      <Field label="Aplicación"><select className="core-input" value={draft.appKey} onChange={(event) => setDraft({ ...draft, appKey: event.target.value })}><option value="">Todas</option>{apps?.map((app) => <option key={app.appKey} value={app.appKey}>{app.name}</option>)}</select></Field>
+      <Field label="App key" hint="Trae los eventos de todas las aplicaciones que usaron ese key."><select className="core-input" value={draft.appKey} onChange={(event) => setDraft({ ...draft, appKey: event.target.value })}><option value="">Todas</option>{apps?.map((app) => <option key={app.appKey} value={app.appKey}>{app.name}</option>)}</select></Field>
       <Field label="Tipo de actor"><select className="core-input" value={draft.actorType} onChange={(event) => setDraft({ ...draft, actorType: event.target.value })}><option value="">Todos</option>{['User', 'Application', 'System', 'Anonymous'].map((type) => <option key={type} value={type}>{auditActorTypeLabel(type)}</option>)}</select></Field>
       {TEXT_FILTERS.map(({ name, label, list }) => <Field key={name} label={label}><input className="core-input" value={draft[name]} list={list} autoComplete="off" spellCheck={false} onChange={(event) => setDraft({ ...draft, [name]: event.target.value })} /></Field>)}
       <Field label="Filas por página"><select className="core-input" value={draft.pageSize} onChange={(event) => setDraft({ ...draft, pageSize: event.target.value })}>{PAGE_SIZES.map((count) => <option key={count} value={count}>{count}</option>)}</select></Field>
@@ -134,11 +148,11 @@ export function AuditPage() {
       const isExpanded = expanded === row.id
       return <Fragment key={row.id}><tr id={`audit-row-${row.id}`} className={`core-clickable-row${highlighted === row.id ? ' core-audit-highlight' : ''}`} onClick={() => setExpanded(isExpanded ? null : row.id)}>
         <td><button type="button" className="core-link-button" aria-expanded={isExpanded} onClick={(event) => { event.stopPropagation(); setExpanded(isExpanded ? null : row.id) }}>{formatUtc(row.occurredAtUtc)}</button></td>
-        <td><strong>{auditActionLabel(row.action)}</strong><small className="core-cell-subtitle">{row.action}</small></td>
+        <td><strong>{auditActionText(row)}</strong><small className="core-cell-subtitle">{row.action}</small></td>
         <td>{auditEntityTypeLabel(row.entityType) || '—'}</td><td><code>{row.entityId ?? '—'}</code></td>
         <td>{auditActorTypeLabel(row.actorType)}</td><td><code>{row.actorId ?? '—'}</code></td>
         <td><code>{row.appKey || '—'}</code></td><td><code>{row.correlationId ?? '—'}</code></td><td>{row.ipAddress || '—'}</td>
-      </tr>{isExpanded && <tr className="core-audit-detail-row"><td colSpan={9}><div className="core-json-diff"><div><h3>oldValues</h3><pre>{JSON.stringify(row.oldValues ?? null, null, 2)}</pre></div><div><h3>newValues</h3><pre>{JSON.stringify(row.newValues ?? null, null, 2)}</pre></div></div>{row.userAgent && <p className="core-detail-note">User-Agent: {row.userAgent}</p>}</td></tr>}</Fragment>
+      </tr>{isExpanded && <tr className="core-audit-detail-row"><td colSpan={9}><div className="core-json-diff"><div><h3>oldValues</h3><pre>{JSON.stringify(row.oldValues ?? null, null, 2)}</pre></div><div><h3>newValues</h3><pre>{JSON.stringify(row.newValues ?? null, null, 2)}</pre></div></div>{row.applicationId && <p className="core-detail-note">Application ID: <code>{row.applicationId}</code></p>}{row.userAgent && <p className="core-detail-note">User-Agent: {row.userAgent}</p>}</td></tr>}</Fragment>
     })}</tbody></table></div>}</Panel>
     {historyUserId && history.data && <div className="core-pagination"><span>{history.data.length.toLocaleString('es-AR')} eventos</span></div>}
     {!historyUserId && data && (() => { const page = toNumber(data.page); const pageSize = toNumber(data.pageSize); const total = toNumber(data.totalCount); return <div className="core-pagination"><span>{total.toLocaleString('es-AR')} filas en total</span><div><SecondaryButton disabled={page <= 1} onClick={() => changePage(page - 1)}>Anterior</SecondaryButton><span>Página {page} · {pageSize} por página</span><SecondaryButton disabled={page * pageSize >= total} onClick={() => changePage(page + 1)}>Siguiente</SecondaryButton></div></div> })()}
