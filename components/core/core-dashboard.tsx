@@ -9,6 +9,7 @@ import useSWR, { SWRConfig } from 'swr'
 import { CoreSession, SESSION_KEY, fetchSession, logout as bffLogout, sessionEndedStore } from '@/lib/core-client'
 import { LoginForm } from './login-form'
 import { ConfirmProvider, LoadingState } from './shared'
+import { useToast } from './toast'
 import { ROUTES } from './url-state'
 
 type NavItem = { name: string; href: string; icon: typeof Activity }
@@ -30,6 +31,7 @@ export default function CoreDashboard({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const current = activeItem(pathname)
   const [loggingOut, setLoggingOut] = useState(false)
+  const toast = useToast()
 
   if (isLoading || loggingOut) return <main className="core-boot"><LoadingState label={loggingOut ? 'Cerrando sesión…' : 'Verificando sesión…'} /></main>
   if (!session) {
@@ -38,7 +40,7 @@ export default function CoreDashboard({ children }: { children: ReactNode }) {
 
   async function logout() {
     setLoggingOut(true)
-    try { await bffLogout() } finally { setLoggingOut(false) }
+    try { await bffLogout(); toast.info('Cerraste sesión.') } finally { setLoggingOut(false) }
   }
 
   return <SWRConfig value={swrOptions}><Tooltip.Provider><ConfirmProvider><div className="core-shell">

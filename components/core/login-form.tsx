@@ -1,27 +1,28 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { ArrowRight, Fingerprint, KeyRound, ShieldCheck } from 'lucide-react'
-import { CoreApiError, CoreSession, login } from '@/lib/core-client'
-import { errorMessage } from '@/lib/error-messages'
+import { CoreSession, login } from '@/lib/core-client'
+import { useToast } from './toast'
 
 export function LoginForm({ onAuthenticated, initialError = null }: { onAuthenticated: (session: CoreSession) => void; initialError?: unknown }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<unknown>(null)
-  const [attempted, setAttempted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const visibleError = error ?? (!attempted ? initialError : null)
+  const toast = useToast()
+
+  // Sesión cerrada por el BFF (refresh vencido → info, reusado → warning, 403 → error).
+  useEffect(() => {
+    if (initialError) toast.fromError(initialError)
+  }, [initialError])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setError(null)
-    setAttempted(true)
     setSubmitting(true)
     try {
       onAuthenticated(await login(email.trim(), password))
     } catch (caught) {
-      setError(caught)
+      toast.fromError(caught)
     } finally {
       setSubmitting(false)
       setPassword('')
@@ -39,7 +40,6 @@ export function LoginForm({ onAuthenticated, initialError = null }: { onAuthenti
         <form className="core-login-form" onSubmit={submit}>
           <label className="core-field"><span>Email</span><div className="core-input-wrap"><Fingerprint aria-hidden="true" /><input type="email" name="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nombre@empresa.com" required maxLength={320} /></div></label>
           <label className="core-field"><span>Contraseña</span><div className="core-input-wrap"><KeyRound aria-hidden="true" /><input type="password" name="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Ingresá tu contraseña" required maxLength={128} /></div></label>
-          {visibleError ? <div className="core-error" role="alert"><strong>{errorMessage(visibleError)}</strong>{visibleError instanceof CoreApiError && <small>Código: {visibleError.errorCode} · Correlation ID: {visibleError.correlationId}</small>}</div> : null}
           <button className="core-primary-button core-login-submit" type="submit" disabled={submitting || !email.trim() || !password}>
             {submitting ? 'Verificando…' : 'Iniciar sesión'} <ArrowRight aria-hidden="true" />
           </button>

@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, CheckCircle2, KeyRound, MailCheck } from 'lucide-react'
 import { CoreApiError } from '@/lib/core-client'
-import { errorMessage } from '@/lib/error-messages'
+import { errorField, errorMessage } from '@/lib/error-messages'
+import { useToast } from './toast'
 
 const MIN_PASSWORD = 10
 const MAX_PASSWORD = 128
@@ -27,6 +28,8 @@ export function AcceptInvitation() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [done, setDone] = useState(false)
+  const toast = useToast()
+  const passwordError = errorField(error) === 'password' ? errorMessage(error) : null
   // Con el token vencido o usado no tiene sentido seguir mostrando el formulario.
   const tokenRejected = error instanceof CoreApiError && error.errorCode === 'Auth.InvalidOneTimeToken'
   const mismatch = confirmation.length > 0 && password !== confirmation
@@ -43,9 +46,14 @@ export function AcceptInvitation() {
     setSubmitting(true); setError(null)
     try {
       await acceptInvitation(token, password)
+      toast.success('Cuenta activada. Ya podés ingresar.')
       setDone(true)
     } catch (caught) {
-      setError(caught)
+      // Contraseña débil: debajo del campo (el link sigue sirviendo). Token inválido: reemplaza el
+      // formulario. El resto: toast.
+      const tokenError = caught instanceof CoreApiError && caught.errorCode === 'Auth.InvalidOneTimeToken'
+      if (errorField(caught) === 'password' || tokenError) setError(caught)
+      if (errorField(caught) !== 'password') toast.fromError(caught)
     } finally {
       setSubmitting(false)
       setPassword(''); setConfirmation('')
@@ -69,9 +77,8 @@ export function AcceptInvitation() {
         {!token ? <div className="core-error" role="alert"><strong>El link no es válido: le falta el código de invitación. Abrí el link completo del email o pedile a un administrador que te reenvíe la invitación.</strong></div>
           : tokenRejected ? <div className="core-error" role="alert"><strong>{errorMessage(error)}</strong><small>Código: {(error as CoreApiError).errorCode} · Correlation ID: {(error as CoreApiError).correlationId}</small></div>
           : <form className="core-login-form" onSubmit={submit}>
-            <label className="core-field" htmlFor="accept-password"><span>Contraseña</span><div className="core-input-wrap"><KeyRound aria-hidden="true" /><input id="accept-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={MIN_PASSWORD} maxLength={MAX_PASSWORD} aria-describedby="accept-password-hint" autoFocus /></div><small id="accept-password-hint">Entre {MIN_PASSWORD} y {MAX_PASSWORD} caracteres.</small></label>
+            <label className="core-field" htmlFor="accept-password"><span>Contraseña</span><div className="core-input-wrap"><KeyRound aria-hidden="true" /><input id="accept-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={MIN_PASSWORD} maxLength={MAX_PASSWORD} aria-describedby="accept-password-hint" autoFocus /></div>{passwordError && <small className="core-field-error-text" role="alert">{passwordError}</small>}<small id="accept-password-hint">Entre {MIN_PASSWORD} y {MAX_PASSWORD} caracteres.</small></label>
             <label className="core-field" htmlFor="accept-confirmation"><span>Repetí la contraseña</span><div className="core-input-wrap"><KeyRound aria-hidden="true" /><input id="accept-confirmation" type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required minLength={MIN_PASSWORD} maxLength={MAX_PASSWORD} aria-invalid={mismatch} aria-describedby={mismatch ? 'accept-mismatch' : undefined} /></div>{mismatch && <small id="accept-mismatch" className="core-field-error">Las contraseñas no coinciden.</small>}</label>
-            {error ? <div className="core-error" role="alert"><strong>{errorMessage(error)}</strong>{error instanceof CoreApiError && <small>Código: {error.errorCode} · Correlation ID: {error.correlationId}</small>}</div> : null}
             <button className="core-primary-button core-login-submit" type="submit" disabled={submitting || mismatch || password.length < MIN_PASSWORD || !confirmation}>{submitting ? 'Guardando…' : 'Activar mi cuenta'} <ArrowRight aria-hidden="true" /></button>
           </form>}
       </>}

@@ -23,10 +23,12 @@ const ACTIONS: Record<string, string> = {
   USER_EMAIL_CHANGED: 'Email de usuario cambiado',
   USER_LOCKED: 'Usuario bloqueado',
   USER_UNLOCKED: 'Usuario desbloqueado',
+  USER_DELETED: 'Usuario eliminado',
   APPLICATION_CREATED: 'Aplicación creada',
   APPLICATION_UPDATED: 'Aplicación actualizada',
   APPLICATION_STATUS_CHANGED: 'Estado de aplicación cambiado',
   APPLICATION_SECRET_ROTATED: 'Secret de aplicación rotado',
+  APPLICATION_DELETED: 'Aplicación eliminada',
   ACCESS_GRANTED: 'Acceso a aplicación otorgado',
   ACCESS_REVOKED: 'Acceso a aplicación quitado',
   ACCESS_ROLES_CHANGED: 'Roles de un acceso cambiados',
@@ -43,6 +45,7 @@ const ACTIONS: Record<string, string> = {
   NOTIFICATION_QUEUED: 'Email encolado',
   NOTIFICATION_SENT: 'Email enviado',
   NOTIFICATION_FAILED: 'Email fallido',
+  NOTIFICATIONS_CANCELLED: 'Notificaciones canceladas por eliminación de la app',
   AUDIT_LOG_EXPORTED: 'Auditoría exportada',
 }
 
@@ -76,6 +79,18 @@ export const AUDIT_ACTIONS = Object.keys(ACTIONS)
 
 const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null)
 const record = (value: unknown) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null)
+
+/**
+ * Texto de la acción de un evento. Para NOTIFICATIONS_CANCELLED incluye cuántas se cancelaron
+ * (`newValues.cancelledCount`).
+ */
+export function auditActionText(row: Pick<CoreAuditRow, 'action' | 'newValues'>) {
+  if (row.action === 'NOTIFICATIONS_CANCELLED') {
+    const count = Number(record(row.newValues)?.cancelledCount)
+    if (Number.isFinite(count)) return `${count} ${count === 1 ? 'notificación cancelada' : 'notificaciones canceladas'} por eliminación de la app`
+  }
+  return auditActionLabel(row.action)
+}
 
 /**
  * Nombre legible de la entidad, sacado de `newValues`/`oldValues` (Core guarda ahí el estado de la
