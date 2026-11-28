@@ -6,32 +6,21 @@ import { useRouter } from 'next/navigation'
 import { Activity, AppWindow, Check, Copy, History, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Users } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import { coreJson, CoreApiError, fetcher, jsonBody, seg } from '@/lib/core-client'
-import { APP_STATUS, RESERVED_APP_KEY, toNumber, type CoreApp, type CoreAppCreated, type CoreAppUserPage, type CoreAuditPage, type CoreAuditRow, type CoreCreateApp, type CoreHealth, type CoreRotateSecret, type CoreUpdateApp, type CoreUserDetail, type CoreUserPage } from '@/lib/core-api/types'
+import { APP_STATUS, RESERVED_APP_KEY, toNumber, type CoreApp, type CoreAppCreated, type CoreAppUserPage, type CoreAuditPage, type CoreAuditRow, type CoreCreateApp, type CoreRotateSecret, type CoreUpdateApp, type CoreUserDetail, type CoreUserPage } from '@/lib/core-api/types'
 import { auditActionText, auditActorTypeLabel, auditEntityTypeLabel, describeAuditEntity } from '@/lib/audit-labels'
 import { CheckRow, DangerButton, EmptyState, ErrorNotice, Field, LoadingState, Modal, PageHeading, Panel, PrimaryButton, RowActionsMenu, SecondaryButton, StatusBadge, fieldError, formLevelError, useConfirm, useCurrentSession } from './shared'
 import { useToast } from './toast'
 import { appAuditHref, auditEventHref } from './url-state'
 
-// GET /health responde 503 con { status: "Unhealthy", database: "Unhealthy" } si la base no contesta.
-async function fetchHealth(): Promise<CoreHealth> {
-  try {
-    return await coreJson<CoreHealth>('health')
-  } catch (error) {
-    if (error instanceof CoreApiError && error.status === 503 && error.errorCode === 'Http.503') return { status: 'Unhealthy', database: 'Unhealthy' }
-    throw error
-  }
-}
-
 const RECENT_KEY = 'api/audit-logs?pageSize=10'
 const stableOptions = { revalidateOnFocus: false, revalidateIfStale: false, shouldRetryOnError: false }
 
 export function OverviewPage() {
-  const health = useSWR<CoreHealth>('health', fetchHealth)
   const apps = useSWR<CoreApp[]>('api/apps', fetcher<CoreApp[]>)
   const users = useSWR<CoreUserPage>('api/users?pageSize=1', fetcher<CoreUserPage>)
   const audit = useSWR<CoreAuditPage>(RECENT_KEY, fetcher<CoreAuditPage>)
-  const errors = [health.error, apps.error, users.error, audit.error].filter(Boolean)
-  if (!health.data || !apps.data || !users.data || !audit.data) {
+  const errors = [apps.error, users.error, audit.error].filter(Boolean)
+  if (!apps.data || !users.data || !audit.data) {
     return <><PageHeading eyebrow="SISTEMA · RESUMEN" title="Resumen general" description="Estado actual y actividad reciente de HREF Core." />{errors.map((error, index) => <ErrorNotice key={index} error={error} />)}{errors.length ? <EmptyState title="Resumen incompleto" detail="No se pudieron cargar todos los datos reales de HREF Core." /> : <LoadingState />}</>
   }
 
@@ -39,7 +28,6 @@ export function OverviewPage() {
     <PageHeading eyebrow="SISTEMA · RESUMEN" title="Resumen general" description="Estado actual y actividad reciente de HREF Core." />
     {errors.map((error, index) => <ErrorNotice key={index} error={error} />)}
     <div className="core-summary-grid">
-      <Panel className="core-summary-card"><div className="core-summary-label"><Activity aria-hidden="true" /> Estado general</div><div className="core-summary-value"><StatusBadge tone={health.data.status === 'Healthy' ? 'success' : 'danger'}>{health.data.status}</StatusBadge></div><p>Base de datos: <StatusBadge tone={health.data.database === 'Healthy' ? 'success' : 'danger'}>{health.data.database}</StatusBadge></p></Panel>
       <Panel className="core-summary-card"><div className="core-summary-label"><AppWindow aria-hidden="true" /> Aplicaciones</div><div className="core-summary-value">{apps.data.length}</div><p>Aplicaciones registradas en Core</p></Panel>
       <Panel className="core-summary-card"><div className="core-summary-label"><Users aria-hidden="true" /> Usuarios</div><div className="core-summary-value">{toNumber(users.data.totalCount).toLocaleString('es-AR')}</div><p>Identidades globales</p></Panel>
     </div>
