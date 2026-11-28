@@ -9,6 +9,7 @@ import useSWR, { SWRConfig } from 'swr'
 import { CoreSession, SESSION_KEY, fetchSession, logout as bffLogout, sessionEndedStore } from '@/lib/core-client'
 import { LoginForm } from './login-form'
 import { ConfirmProvider, LoadingState } from './shared'
+import { SystemStatus } from './system-status'
 import { useToast } from './toast'
 import { ROUTES } from './url-state'
 
@@ -46,8 +47,8 @@ export default function CoreDashboard({ children }: { children: ReactNode }) {
   return <SWRConfig value={swrOptions}><Tooltip.Provider><ConfirmProvider><div className="core-shell">
     <aside className="core-sidebar">
       <div className="core-brand"><span className="brand-mark"><span>H</span></span><div><strong>HREF <b>Core</b></strong><small>CONTROL PLANE</small></div><span className="core-version">ADMIN</span></div>
-      <div className="core-workspace"><div className="core-workspace-icon">HC</div><div><strong>HREF Solutions</strong><small>Workspace principal</small></div><ChevronRight aria-hidden="true" /></div>
       <nav className="core-nav" aria-label="Navegación principal">{navigation.map((group) => <div className="core-nav-group" key={group.label}><p>{group.label}</p>{group.items.map(({ name, href, icon: Icon }) => <Link key={name} href={href} className={`core-nav-item${current?.href === href ? ' is-active' : ''}`} aria-label={name} title={name} aria-current={current?.href === href ? 'page' : undefined}><Icon aria-hidden="true" /><span>{name}</span></Link>)}</div>)}</nav>
+      <SystemStatus />
       <div className="core-sidebar-bottom"><div className="core-account"><div className="core-avatar core-avatar-small">{(session.name || session.email).split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div><div className="core-account-copy"><strong>{session.name || session.email}</strong><small>{session.email}</small></div><button className="core-icon-button" type="button" aria-label="Cerrar sesión" onClick={() => void logout()}><LogOut aria-hidden="true" /></button></div></div>
     </aside>
     <section className="core-main-column"><header className="core-topbar"><div className="core-breadcrumbs"><span>HREF Core</span><ChevronRight aria-hidden="true" /><strong>{current?.name ?? 'Panel'}</strong></div><div className="core-topbar-user"><span className="core-topbar-label">BACKOFFICE</span><span className="core-topbar-divider" /><span>{session.name || session.email}</span><button type="button" className="core-icon-button core-mobile-logout" aria-label="Cerrar sesión" onClick={() => void logout()}><LogOut aria-hidden="true" /></button></div></header>
